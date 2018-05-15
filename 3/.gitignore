@@ -1,0 +1,8 @@
+*.swp
+*.o
+*a.out
+player
+player-debug
+master
+master-debug
+

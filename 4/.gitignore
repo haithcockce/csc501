@@ -1,0 +1,7 @@
+a.out
+*swp
+.idea*
+*pyc
+*BAK
+benchmark
+postmark

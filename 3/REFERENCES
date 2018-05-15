@@ -1,0 +1,21 @@
+#### select, socket listening multiplexing
+- http://stackoverflow.com/questions/15560336/listen-to-multiple-ports-from-one-server
+
+#### Difference in bind and accept
+- http://stackoverflow.com/questions/27014955/socket-connect-vs-bind
+
+#### Conceptual stuff
+- http://www.csd.uoc.gr/~hy556/material/tutorials/cs556-3rd-tutorial.pdf
+
+#### Nearly everything 
+- http://beej.us/guide/bgnet/output/html/singlepage/bgnet.html
+
+man 2 recv
+man 2 send
+man 2 select
+man 3 memcpy
+man 3 sprintf
+man 3 atoi
+man 3 memset
+man 2 accept
+man 2 bind

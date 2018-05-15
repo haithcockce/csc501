@@ -1,0 +1,5 @@
+<installation path>/fuse/example
+http://pysnippet.blogspot.com/2009/11/fuse-filesystem-in-userspace-part-2.html
+http://www.slideshare.net/matteobertozzi/python-fuse
+https://github.com/tylerflint/python-fuse-ramfs/blob/master/ramfs
+https://pythonhosted.org/llfuse/operations.html

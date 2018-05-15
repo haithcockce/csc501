@@ -1,0 +1,6 @@
+<filesystem name="P4FS">
+   <dir>
+      <name>/</name>
+      <st_mode>something</st_mode>
+   </dir>
+</filesystem>

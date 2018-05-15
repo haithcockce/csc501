@@ -1,0 +1,29 @@
+<filesystem name="P4FS">
+   <dir>
+      <st_mode>something</st_mode>
+      <st_nlink>2</st_nlink>
+      <parent>/</parent>
+      <path>/example</path>
+      <child_dirs>
+         <path>a</path>
+         <path>b</path>
+      </child_dirs>
+      <file_paths>
+         <path>filea</path>
+      </file_paths>
+   </dir>
+   <file>
+      <st_mode>something else</st_mode>
+      <st_nlink>2</st_nlink>
+      <parent>/</parent>
+      <path>file</path>
+      <data>This is an example file content</data>
+   </file>
+   <file>
+      <st_mode>something else</st_mode>
+      <st_nlink>2</st_nlink>
+      <parent>/example</parent>
+      <path>filea</path>
+      <data>More example file  content</data>
+   </file>
+</filesystem>

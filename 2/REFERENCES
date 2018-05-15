@@ -1,0 +1,19 @@
+Execution
+- man 3 exec
+- man fork
+
+I/O Redirection
+- man 2 open
+
+Execution Errors
+- man 2 errno
+
+Environment Variables 
+- man 3 getenv
+- man 3 setenv
+
+Signals
+- man 7 signal
+
+Priority Reassignment
+- man 3 setpriority

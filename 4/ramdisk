@@ -1,0 +1,295 @@
+#!/usr/bin/env python
+
+# THINGS THAT MAKE FUSE-PYTHON A PILE OF SHIT
+# 1) You are REQUIRED to return a negative errno/fuse.E* value
+# 2) You are REQUIRED to literally remove your own custom args you may need via pop, otherwise
+#    fuse-python fails
+# 3) fuse-python calls `getattr()` against the file it just created
+# 4) Calling fuse.Stat() does not actually create a new stat object, only provides
+#    a way to access the FUSE root fs st_stat stuff. ALternatively, Python's
+#    scoping is weird as hell.
+
+# TODO
+# Save to file and pull back from it later. XML! :D:D:D
+
+import fuse, stat, errno, time, sys, os
+from fuse import *
+
+class P4FS(fuse.Fuse):
+    def __init__(self, *args, **kw):
+        fuse.Fuse.__init__(self, *args, **kw)
+        self.uid = os.getuid()
+        self.gid = os.getgid()
+        self.FS_LIMIT = 0
+        self.curr_size = 0
+        self.dir_list = {}
+        self.file_list = {}
+
+
+    def main(self, *a, **kw):
+        return fuse.Fuse.main(self, *a, **kw)
+
+
+    def getattr(self, path):
+        if self.file_list.has_key(path):
+            return self.file_list[path].stat()
+        elif self.dir_list.has_key(path):
+            return self.dir_list[path].stat()
+        else:
+            return -errno.ENOENT
+
+    def mkdir(self, path, mode):
+        if self.dir_list.has_key(path):
+            return -errno.EEXIST
+
+        dirname = os.path.basename(path)
+        parent_path = os.path.dirname(path)
+
+        if not self.dir_list.has_key(parent_path):
+            return -errno.ENOENT
+
+        P4Entry(self, path, is_dir=True, mode=mode)
+
+
+    def rmdir(self, path):
+        # Error out if we do not exist
+        if not self.dir_list.has_key(path):
+            return -errno.ENOENT
+
+        # Error out if we are not empty
+        me = self.dir_list[path]
+        if len(me.child_dirs) > 0 or len(me.file_paths) > 0:
+            return -errno.ENOTEMPTY
+
+        dirname = os.path.basename(path)
+        parent = self.dir_list[os.path.dirname(path)]
+
+        # Remove outself from our parent.
+        # We can assume the parent exists since we always store all the paths
+        parent.child_dirs.remove(dirname)
+        #parent.st.st_nlink -= 1
+        self.dir_list.pop(path)
+
+    def readdir(self, path, offset):
+        # Error out if the directory doesn't exist
+        if not self.dir_list.has_key(path) and not self.file_list.has_key(path):
+            yield -errno.ENOENT
+            return
+
+        # Walk through the children paths and yield each
+        yield fuse.Direntry('.')
+        yield fuse.Direntry('..')
+        if self.dir_list.has_key(path):
+            for entry in self.dir_list.get(path).child_dirs:
+                yield fuse.Direntry(entry)
+            for entry in self.dir_list.get(path).file_paths:
+                yield fuse.Direntry(entry)
+        else:
+            yield fuse.Direntry(self.file_list[path].path)
+
+
+    def create(self, path, flags, mode):
+        if self.file_list.has_key(path):
+            return -errno.EEXIST
+
+        parent_path = os.path.dirname(path)
+        if not self.dir_list.has_key(parent_path):
+            return -errno.ENOENT
+
+        P4Entry(self, path, is_dir=False, mode=mode)
+        return 0
+
+
+    def read(self, path, size, offset):
+        # Check if the file exists first
+        if not self.file_list.has_key(path):
+            return -errno.ENOENT
+        return self.file_list.get(path).data[offset:offset + size]
+
+
+    def write(self, path, buf, offset):
+        # If we are full, the we have NO SPaCe left
+        if self.curr_size == self.FS_LIMIT:
+            return -errno.ENOSPC
+
+        # Check if the file exists first
+        if not self.file_list.has_key(path):
+            return -errno.ENOENT
+
+        # Truncate the buf if we will reach the FS_LIMIT by writing the buf
+        if self.curr_size + len(buf) >= self.FS_LIMIT:
+            buf = buf[:self.FS_LIMIT - self.curr_size]
+
+        file = self.file_list.get(path)
+        old_size = len(file.data)
+        file.data = file.data[:offset] + buf + file.data[offset + len(buf):]
+        file.update_time()
+        self.curr_size += (len(file.data) - old_size)
+        return len(buf)
+
+
+
+    def truncate(self, path, length):
+        # Check if the file exists first
+        if not self.file_list.has_key(path):
+            return -errno.ENOENT
+        file = self.file_list.get(path)
+        old_size = len(file.data)
+        if len(file.data) > length:
+            file.data = file.data[:length]
+        else:
+            file.data = []
+        self.curr_size += len(file.data) - old_size
+
+
+    def unlink(self, path):
+        if not self.file_list.has_key(path):
+            return -errno.ENOENT
+        file = self.file_list.get(path)
+        self.file_list.pop(path)
+        self.dir_list.get(file.parent).file_paths.remove(os.path.basename(path))
+        self.curr_size -= len(file.data)
+
+
+
+class P4Entry:
+    def __init__(self, fs, pathname, is_dir, mode=0755):
+
+        # Get modes and set stat related things
+        if is_dir:
+            self.st_mode = (mode | stat.S_IFDIR)
+        else:
+            self.st_mode = (mode | stat.S_IFREG)
+        self.st_nlink = 2
+        self.st_atime = int(time.time())
+        self.st_mtime = self.st_atime
+        self.st_ctime = self.st_atime
+        self.st_uid = fs.uid
+        self.st_gid = fs.gid
+
+        # Set personal and parent path names
+        if pathname == '/':
+            self.parent = None
+            self.path = '/'
+        else:
+            self.path = os.path.basename(pathname)
+            self.parent = os.path.dirname(pathname)
+            parent = fs.dir_list[self.parent]
+            if is_dir:
+                parent.child_dirs.append(self.path)
+            else:
+                parent.file_paths.append(self.path)
+
+        # Setup contents. Note we do not exlicitly keep track of . and ..
+        if is_dir:
+            self.file_paths = []
+            self.child_dirs = []
+            fs.dir_list[pathname] = self
+        else:
+            # Python 2 allows raw hex and str data to be interpreted the same
+            self.data = ''
+            fs.file_list[pathname] = self
+
+
+    def update_time(self):
+        self.st_atime = int(time.time())
+        self.st_mtime = self.st_atime
+        self.st_ctime = self.st_atime
+
+
+    def stat(self):
+        st = fuse.Stat()
+        st.st_mode = self.st_mode
+        st.st_nlink = 2
+        st.st_uid = self.st_uid
+        st.st_gid = self.st_gid
+        if stat.S_ISREG(self.st_mode):
+            st.st_size = len(self.data)
+        else:
+            st.st_size = 0
+        st.st_atime = self.st_atime
+        st.st_mtime = self.st_mtime
+        st.st_ctime = self.st_ctime
+        return st
+
+
+################################################################################
+############################# # Helper Functions # #############################
+################################################################################
+
+def init_p4fs(argv, fs):
+    # Check the args
+    if len(argv) < 3:
+        print "ERROR: expected at least 3 args, received %d" % len(argv)
+        print "Usage: ./ramdisk <mount point> <size in MiB> [--debug]"
+        exit(errno.EINVAL)
+
+    # FUSE and p4fs specific debugging enablement
+    if '--debug' in argv:
+        argv.remove('--debug')
+        argv.insert(1, '-s')
+        argv.insert(2, '-d')
+        argv.insert(3, '-f')
+        fs.debug = False
+        try:
+            import ipdb
+            global ipdb
+            fs.debug = True
+        except ImportError:
+            try:
+                import pdb
+                global pdb
+                fs.debug = True
+            except ImportError:
+                print "WARN: Unable to find a suitable debugging module."
+                print "WARN: Will continue, but you will not have access to a debugger."
+
+    # Check if the value passed in is an integer
+    size = argv.pop()
+    if not size.isdigit():
+        print "ERROR: expected integer for size"
+        print "Usage: ./ramdisk <mount point> <size in MiB> [--debug]"
+        exit(errno.EINVAL)
+
+    # Check if the size passed in is an appropriate size
+    size = int(size) * 1024 * 1024 # Translate from MiB to B
+    mem_in_mib = os.sysconf('SC_PHYS_PAGES') * os.sysconf('SC_PAGE_SIZE')
+    if size > mem_in_mib:
+        print 'ERROR: Requested too much memory. Requested: {0} bytes, available: {1} bytes'.format(size, mem_in_mib)
+        exit(errno.ENOMEM)
+
+    P4Entry(fs, '/', True)
+    fs.FS_LIMIT = size
+
+
+def debug(enabled=False):
+    if not enabled:
+        return
+    # try to use ipython-style debugging since it is my preference, but fall
+    # back to pdb if ipdb is not available. Silently fail if neither are
+    # available since we already warn on init if we can not find either.
+    try:
+        ipdb.set_trace()
+    except NameError:
+        try:
+            pdb.set_trace()
+        except NameError:
+            pass
+
+
+
+
+################################################################################
+########################### # FUSE Specific Things # ###########################
+################################################################################
+
+fuse.fuse_python_api = (0, 2)
+fuse.feature_assert('stateful_files', 'stateful_dirs')
+
+
+
+if __name__ == "__main__":
+    p4fs = P4FS(dash_s_do='setsingle')
+    init_p4fs(sys.argv, p4fs)
+    p4fs.parse(errex=1)
+    p4fs.main()

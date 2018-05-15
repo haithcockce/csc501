@@ -1,0 +1,55 @@
+Common subdirectories: 2.prepatch/doodles and 2/doodles
+diff -c 2.prepatch/engine.c 2/engine.c
+*** 2.prepatch/engine.c	2016-03-19 21:50:28.645003018 -0400
+--- 2/engine.c	2016-03-19 22:17:25.919518840 -0400
+***************
+*** 37,42 ****
+--- 37,49 ----
+          if(strcmp(command->args[0], "logout") == 0) {
+              return LOGOUT;
+          } 
++         else if(strcmp(command->args[0], "end") == 0) {
++             return ENDINPUT;
++         }
++         else if(strcmp(command->args[0], "empty") == 0) {
++             return EMPTYINPUT;
++         }
++ 
+          fflush(stdout);
+          fflush(stderr);
+  
+diff -c 2.prepatch/engine.h 2/engine.h
+*** 2.prepatch/engine.h	2016-03-19 21:50:28.646003002 -0400
+--- 2/engine.h	2016-03-19 22:17:25.913518938 -0400
+***************
+*** 2,7 ****
+--- 2,9 ----
+  #define FALSE   0
+  
+  #define LOGOUT      -10
++ #define ENDINPUT    -20
++ #define EMPTYINPUT  -30
+  #define EFORKFAIL   -1
+  #define EXEC_SUCC   0
+  #define EEXEC       1
+Only in 2: .gitignore
+diff -c 2.prepatch/main.c 2/main.c
+*** 2.prepatch/main.c	2016-03-19 21:50:28.648002969 -0400
+--- 2/main.c	2016-03-19 22:17:25.945518412 -0400
+***************
+*** 97,103 ****
+      result = run(p);
+      freePipe(p);
+      __clean_files();
+!     if(result == LOGOUT) {
+          break;
+      }
+    }
+--- 97,103 ----
+      result = run(p);
+      freePipe(p);
+      __clean_files();
+!     if(result == LOGOUT || result == ENDINPUT || result == EMPTYINPUT) {
+          break;
+      }
+    }
